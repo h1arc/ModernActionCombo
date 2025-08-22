@@ -6,23 +6,14 @@
 [![Status](https://img.shields.io/badge/Status-Backend%20Complete-green.svg)](DEV_JOURNAL.md)
 
 > **Modern High-Performance Action Resolver for FFXIV**  
-> Ultra-fast combo system with modern .NET 9 optimizations. Built from the ground up for performance and simplicity.
-
-## What is ModernActionCombo?
-
-**ModernActionCombo** is a clean-slate, ultra-high-performance action resolver for Final Fantasy XIV that consolidates combos and abilities onto single buttons with sub-50ns resolution times.
+> Yet another combo plugin with modern .NET 9 optimizations.
 
 This is a **complete rewrite** focusing on:
-- **Performance**: Sub-50ns action resolution with zero allocations
-- **Simplicity**: Clean architecture that's easy to understand and extend  
-- **Reliability**: Button mashing protection and comprehensive testing
+- **Performance**: Sub-ms action resolution with zero allocations
+- **Simplicity**: Clean architecture that's easy to understand and extend
 - **Modern .NET**: Leveraging .NET 9's latest performance optimizations
 
-### Thanks
-
-This project was very much inspired by [WrathCombo team](https://github.com/PunishXIV/WrathCombo)'s WrathCombo. I wanted to see how far I could push a system like this.
-
-### Project Structure
+### Project Structure (to be updated)
 ```
 /ModernActionCombo/
 ├── src/                         # Streamlined implementation
@@ -37,18 +28,15 @@ This project was very much inspired by [WrathCombo team](https://github.com/Puni
 └── DEV_JOURNAL.md              # Complete development history
 ```
 
-### Phase 3: Active
+### Phase 3: Active (to be updated)
 - [ ] UI development for configuration
 - [ ] Dalamud plugin integration
 - [ ] Live FFXIV testing
 - [ ] Additional job implementations
 
-### **Quick Benchmark Results** (5-10 seconds):
-- **FastPath Resolution**: 17.43ns → 70/100 🟡
-- **GameState Resolution**: 71.36ns → 70/100 🟡  
-- **Batch Processing**: 203.91ns → 95/100 🟢
-- **Overall Score**: 78/100 🟡 "Good! Meeting performance requirements!"
-
 ## �📜 License
 
 This project is licensed under the AGPL v3 License - see the [LICENSE](LICENSE) file for details.
+
+
+This project was inspired by [WrathCombo team](https://github.com/PunishXIV/WrathCombo)'s WrathCombo plus other plugins like it.
