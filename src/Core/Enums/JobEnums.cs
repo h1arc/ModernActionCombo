@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
-namespace ModernWrathCombo.Core.Enums;
+namespace ModernActionCombo.Core.Enums;
 
 /// <summary>
 /// Job role classifications for organizing combo logic by job type.

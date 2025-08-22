@@ -383,3 +383,7 @@ packages/
 *.dll
 *.pdb
 *.cache
+
+
+lib/
+src/Benchmarks

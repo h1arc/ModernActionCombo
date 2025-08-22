@@ -2,7 +2,7 @@ using System;
 using System.Runtime.CompilerServices;
 using Dalamud.Plugin.Services;
 
-namespace ModernWrathCombo.Core.Data;
+namespace ModernActionCombo.Core.Data;
 
 /// <summary>
 /// Game state manager for tracking current game information.

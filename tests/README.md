@@ -1,24 +1,46 @@
 # ModernWrathCombo Testing
 
-This directory contains all tests for the ModernWrathCombo project, organized by test type:
+This directory is prepared for comprehensive testing of the ModernWrathCombo system.
 
-## Directory Structure
+## Current Status
 
+The test infrastructure has been cleaned up and simplified. We'll be building comprehensive tests as the architecture stabilizes.
+
+## Future Testing Plans
+
+### Unit Tests
+- **Core Components**: GameStateCache, ComboBase, WHMHelper
+- **Job Combos**: WHM combo logic, action resolution  
+- **Performance**: SIMD operations, cache efficiency
+
+### Integration Tests
+- **Action Processing**: End-to-end combo execution
+- **GameStateCache**: Real-world state updates
+- **Plugin Integration**: ActionInterceptor workflows
+
+### Performance Tests
+- **Benchmarks**: BenchmarkDotNet for precise measurements
+- **Stress Tests**: High-frequency action processing
+- **Memory Tests**: SIMD cache performance
+
+## Running Tests
+
+```bash
+# Run all tests
+dotnet test
+
+# Run with coverage
+dotnet test --collect:"XPlat Code Coverage"
 ```
-tests/
-├── Unit/                      # Unit tests for individual components
-│   ├── Core/                  # Core system tests (ActionResolver, GameState, etc.)
-│   └── Jobs/WHM/              # Job-specific logic tests
-├── Integration/               # End-to-end integration tests
-├── Performance/               # Performance benchmarks and stress tests
-└── ModernWrathCombo.Tests.csproj  # Test project configuration
-```
 
-## Test Categories
+## Adding New Tests
 
-### Unit Tests (`tests/Unit/`)
-- **Purpose**: Test individual components in isolation
-- **Framework**: xUnit with FluentAssertions
+When adding tests, follow these patterns:
+- Unit tests in `Unit/` subdirectories
+- Integration tests in `Integration/`
+- Performance tests in `Performance/`
+- Use FluentAssertions for readable test assertions
+- Use BenchmarkDotNet for performance measurements
 - **Focus**: Fast execution, high coverage, isolated components
 - **Examples**: 
   - `ActionResolverTests.cs` - Dictionary lookup behavior
