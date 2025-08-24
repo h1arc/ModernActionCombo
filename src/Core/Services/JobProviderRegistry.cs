@@ -76,6 +76,7 @@ public static class JobProviderRegistry
             // Invalidate fast resolver cache on job change
             _fastResolver = null;
             _cachedJobId = 0;
+            _cachedConfigVersion = 0;
             
             ModernActionCombo.PluginLog?.Debug($"🔄 Activated provider for job {jobId}");
         }
@@ -84,6 +85,7 @@ public static class JobProviderRegistry
             _activeProvider = null;
             _fastResolver = null;
             _cachedJobId = 0;
+            _cachedConfigVersion = 0;
             ModernActionCombo.PluginLog?.Debug($"❓ No provider found for job {jobId}");
         }
     }
@@ -97,6 +99,7 @@ public static class JobProviderRegistry
         // Invalidate fast resolver cache on level change
         _fastResolver = null;
         _cachedJobId = 0;
+        _cachedConfigVersion = 0;
         
         // Notify all providers about level change for cache invalidation
         foreach (var provider in _providers.Values)
@@ -201,10 +204,11 @@ public static class JobProviderRegistry
     // Ultra-fast single-dispatch cache for the hot path
     private static Func<uint, GameStateData, uint>? _fastResolver;
     private static uint _cachedJobId = 0;
+    private static uint _cachedConfigVersion = 0;
     
     /// <summary>
     /// Resolve an action using the active job's combo logic.
-    /// Ultra-optimized single-dispatch for <20ns resolution.
+    /// Ultra-optimized single-dispatch for <20ns resolution with config-aware caching.
     /// </summary>
     public static uint ResolveAction(uint actionId, GameStateData gameState)
     {
@@ -212,23 +216,28 @@ public static class JobProviderRegistry
         if (!GameStateCache.CanProcessCombos)
             return actionId;
             
-        // Ultra-fast path: use cached resolver if job hasn't changed
-        if (_fastResolver != null && gameState.JobId == _cachedJobId)
+        var currentConfigVersion = ConfigAwareActionCache.GetConfigVersion();
+        
+        // Ultra-fast path: use cached resolver if job and config haven't changed
+        if (_fastResolver != null && 
+            gameState.JobId == _cachedJobId && 
+            currentConfigVersion == _cachedConfigVersion)
         {
             return _fastResolver(actionId, gameState);
         }
         
-        // Job changed or first time - rebuild the fast resolver
-        return RebuildFastResolver(actionId, gameState);
+        // Job or config changed - rebuild the fast resolver
+        return RebuildFastResolver(actionId, gameState, currentConfigVersion);
     }
     
     /// <summary>
-    /// Rebuilds the ultra-fast resolver when job changes.
-    /// This is the cold path - only called on job change.
+    /// Rebuilds the ultra-fast resolver when job or configuration changes.
+    /// This is the cold path - only called on job/config change.
     /// </summary>
-    private static uint RebuildFastResolver(uint actionId, GameStateData gameState)
+    private static uint RebuildFastResolver(uint actionId, GameStateData gameState, uint configVersion)
     {
         _cachedJobId = gameState.JobId;
+        _cachedConfigVersion = configVersion;
         _fastResolver = null;
         
         if (_activeProvider?.AsComboProvider() is not IComboProvider comboProvider) 
@@ -248,6 +257,10 @@ public static class JobProviderRegistry
                 var grid = grids[0];
                 _fastResolver = (id, state) => 
                 {
+                    // First check for smart target action replacement (like Liturgy → LiturgyBurst)
+                    var smartResolved = SmartTargetResolver.GetResolvedActionId(id);
+                    if (smartResolved != id) return smartResolved;
+                    
                     if (!grid.HandlesAction(id)) return id;
                     
                     var resolvedGCD = grid.Evaluate(id, state);
@@ -272,13 +285,24 @@ public static class JobProviderRegistry
             {
                 // Fast path for single grid, no OGCD
                 var grid = grids[0];
-                _fastResolver = (id, state) => grid.HandlesAction(id) ? grid.Evaluate(id, state) : id;
+                _fastResolver = (id, state) => 
+                {
+                    // First check for smart target action replacement (like Liturgy → LiturgyBurst)
+                    var smartResolved = SmartTargetResolver.GetResolvedActionId(id);
+                    if (smartResolved != id) return smartResolved;
+                    
+                    return grid.HandlesAction(id) ? grid.Evaluate(id, state) : id;
+                };
             }
             else if (hasOGCDSupport)
             {
                 // Multi-grid with OGCD support
                 _fastResolver = (id, state) => 
                 {
+                    // First check for smart target action replacement (like Liturgy → LiturgyBurst)
+                    var smartResolved = SmartTargetResolver.GetResolvedActionId(id);
+                    if (smartResolved != id) return smartResolved;
+                    
                     foreach (var grid in grids)
                     {
                         if (grid.HandlesAction(id))
@@ -307,6 +331,10 @@ public static class JobProviderRegistry
                 // Multi-grid, no OGCD
                 _fastResolver = (id, state) => 
                 {
+                    // First check for smart target action replacement (like Liturgy → LiturgyBurst)
+                    var smartResolved = SmartTargetResolver.GetResolvedActionId(id);
+                    if (smartResolved != id) return smartResolved;
+                    
                     foreach (var grid in grids)
                     {
                         if (grid.HandlesAction(id))

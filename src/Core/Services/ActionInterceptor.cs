@@ -148,17 +148,19 @@ public sealed unsafe class ActionInterceptor : IDisposable
     // Current interception mode
     public static ActionInterceptionMode Mode { get; set; } = ActionInterceptionMode.IconReplacement;
     
-    // Single hook for icon replacement (WrathCombo's proven approach)
-    private Hook<GetAdjustedActionDelegate>? _getAdjustedActionHook;
+    // Hooks for different modes
+    private Hook<GetAdjustedActionDelegate>? _getAdjustedActionHook;  // Icon Replacement
+    private Hook<UseActionDelegate>? _useActionHook;                  // Performance Mode
     
-    // High-performance .NET 9 cache using unsafe fixed arrays
-    private ActionCache _cache = new();
+    // High-performance .NET 9 cache using unsafe fixed arrays with config versioning
+    private ConfigAwareActionCache _cache = new();
     
     // Critical for the hook - copied exactly from WrathCombo
     private IntPtr _actionManager = IntPtr.Zero;
     
-    // Delegate matching WrathCombo exactly
+    // Delegates
     private delegate uint GetAdjustedActionDelegate(IntPtr actionManager, uint actionId);
+    private delegate bool UseActionDelegate(IntPtr actionManager, uint actionType, uint actionId, ulong targetId, uint param, uint useType, int pvp, IntPtr a8);
 
     public ActionInterceptor(GameState gameState, IGameInteropProvider gameInteropProvider)
     {
@@ -172,36 +174,69 @@ public sealed unsafe class ActionInterceptor : IDisposable
     {
         try
         {
-            // Use WrathCombo's exact approach - hook from Dalamud's ActionManager address
-            var actionManagerAddress = (nint)ActionManager.Addresses.GetAdjustedActionId.Value;
+            InitializeIconReplacementHook();
             
-            if (actionManagerAddress == IntPtr.Zero)
-            {
-                ModernActionCombo.PluginLog?.Error("❌ ActionManager.Addresses.GetAdjustedActionId is null");
-                return;
-            }
-
-            _getAdjustedActionHook = _gameInteropProvider.HookFromAddress<GetAdjustedActionDelegate>(
-                actionManagerAddress, GetAdjustedActionDetour);
-                
-            if (_getAdjustedActionHook != null)
-            {
-                _getAdjustedActionHook.Enable();
-                ModernActionCombo.PluginLog?.Info($"✅ ActionInterceptor initialized with Dalamud address: 0x{actionManagerAddress:X}");
-            }
-            else
-            {
-                ModernActionCombo.PluginLog?.Error("❌ Failed to create hook from Dalamud address");
-            }
+            // Performance Mode hook will be initialized when switching modes
+            ModernActionCombo.PluginLog?.Info($"✅ ActionInterceptor initialized in {Mode} mode");
         }
         catch (Exception ex)
         {
             ModernActionCombo.PluginLog?.Error($"ActionInterceptor initialization failed: {ex}");
         }
     }
+    
+    private void InitializeIconReplacementHook()
+    {
+        // Use WrathCombo's exact approach - hook from Dalamud's ActionManager address
+        var actionManagerAddress = (nint)ActionManager.Addresses.GetAdjustedActionId.Value;
+        
+        if (actionManagerAddress == IntPtr.Zero)
+        {
+            ModernActionCombo.PluginLog?.Error("❌ ActionManager.Addresses.GetAdjustedActionId is null");
+            return;
+        }
+
+        _getAdjustedActionHook = _gameInteropProvider.HookFromAddress<GetAdjustedActionDelegate>(
+            actionManagerAddress, GetAdjustedActionDetour);
+            
+        if (_getAdjustedActionHook != null)
+        {
+            _getAdjustedActionHook.Enable();
+            ModernActionCombo.PluginLog?.Debug($"✅ Icon Replacement hook enabled: 0x{actionManagerAddress:X}");
+        }
+        else
+        {
+            ModernActionCombo.PluginLog?.Error("❌ Failed to create GetAdjustedAction hook");
+        }
+    }
+    
+    private void InitializePerformanceModeHook()
+    {
+        // Hook UseAction for direct input
+        var useActionAddress = (nint)ActionManager.Addresses.UseAction.Value;
+        
+        if (useActionAddress == IntPtr.Zero)
+        {
+            ModernActionCombo.PluginLog?.Error("❌ ActionManager.Addresses.UseAction is null");
+            return;
+        }
+
+        _useActionHook = _gameInteropProvider.HookFromAddress<UseActionDelegate>(
+            useActionAddress, UseActionDetour);
+            
+        if (_useActionHook != null)
+        {
+            _useActionHook.Enable();
+            ModernActionCombo.PluginLog?.Debug($"✅ Performance Mode hook enabled: 0x{useActionAddress:X}");
+        }
+        else
+        {
+            ModernActionCombo.PluginLog?.Error("❌ Failed to create UseAction hook");
+        }
+    }
 
     /// <summary>
-    /// The core detour method - copied from WrathCombo pattern but simplified.
+    /// The core detour method for icon replacement - copied from WrathCombo pattern but simplified.
     /// Only job: return the correct action ID.
     /// Uses GameStateCache directly for maximum performance.
     /// </summary>
@@ -215,9 +250,12 @@ public sealed unsafe class ActionInterceptor : IDisposable
                 return _getAdjustedActionHook?.Original(actionManager, actionId) ?? actionId;
             }
 
-            // Debug logging to see what actions are being intercepted
-            // Note: This runs 60+ times per second - only log errors in production
-            
+            // Only active in Icon Replacement mode
+            if (Mode != ActionInterceptionMode.IconReplacement)
+            {
+                return _getAdjustedActionHook.Original(actionManager, actionId);
+            }
+
             // Check if this action might resolve to OGCDs (dynamic conditions)
             var hasOGCDSupport = JobProviderRegistry.HasOGCDSupport();
             
@@ -227,7 +265,7 @@ public sealed unsafe class ActionInterceptor : IDisposable
                 return cachedResult;
             }
             
-            // Get the resolved action from our combo system using cached game state
+            // Get the resolved action from our config-aware combo system using cached game state
             var gameStateData = GetGameStateFromCache();
             var resolvedActionId = JobProviderRegistry.ResolveAction(actionId, gameStateData);
 
@@ -244,6 +282,59 @@ public sealed unsafe class ActionInterceptor : IDisposable
         {
             ModernActionCombo.PluginLog?.Error($"Error in GetAdjustedActionDetour: {ex}");
             return _getAdjustedActionHook?.Original(actionManager, actionId) ?? actionId;
+        }
+    }
+
+    /// <summary>
+    /// Performance Mode detour for UseAction - directly executes resolved actions.
+    /// This is the "direct input" mode that bypasses icon replacement entirely.
+    /// Ultra-fast path for maximum performance.
+    /// </summary>
+    private bool UseActionDetour(IntPtr actionManager, uint actionType, uint actionId, ulong targetId, uint param, uint useType, int pvp, IntPtr a8)
+    {
+        try
+        {
+            // Only process normal actions (actionType 1) in Performance Mode
+            if (actionType != 1 || Mode != ActionInterceptionMode.PerformanceMode)
+            {
+                return _useActionHook!.Original(actionManager, actionType, actionId, targetId, param, useType, pvp, a8);
+            }
+
+            // Safety checks
+            if (_useActionHook == null || actionId == 0 || actionId > 100000)
+            {
+                return _useActionHook?.Original(actionManager, actionType, actionId, targetId, param, useType, pvp, a8) ?? false;
+            }
+
+            // Check if this action might resolve to OGCDs (dynamic conditions)
+            var hasOGCDSupport = JobProviderRegistry.HasOGCDSupport();
+            
+            // Get resolved action - skip cache for OGCD actions due to dynamic conditions
+            uint resolvedActionId;
+            if (!hasOGCDSupport && _cache.TryGetCached(actionId, out uint cachedResult))
+            {
+                resolvedActionId = cachedResult;
+            }
+            else
+            {
+                // Get the resolved action from our config-aware combo system using cached game state
+                var gameStateData = GetGameStateFromCache();
+                resolvedActionId = JobProviderRegistry.ResolveAction(actionId, gameStateData);
+
+                // Cache the result (but skip caching for OGCD-enabled actions due to dynamic conditions)
+                if (!hasOGCDSupport)
+                {
+                    _cache.Cache(actionId, resolvedActionId);
+                }
+            }
+
+            // Execute the resolved action directly
+            return _useActionHook.Original(actionManager, actionType, resolvedActionId, targetId, param, useType, pvp, a8);
+        }
+        catch (Exception ex)
+        {
+            ModernActionCombo.PluginLog?.Error($"Error in UseActionDetour: {ex}");
+            return _useActionHook?.Original(actionManager, actionType, actionId, targetId, param, useType, pvp, a8) ?? false;
         }
     }
 
@@ -267,12 +358,26 @@ public sealed unsafe class ActionInterceptor : IDisposable
     public void ClearCache()
     {
         _cache.Clear();
-        ModernActionCombo.PluginLog?.Debug("Action cache cleared");
+        ModernActionCombo.PluginLog?.Debug("Config-aware action cache cleared");
     }
 
     /// <summary>
-    /// Switches between action interception modes.
-    /// Note: Currently only IconReplacement is implemented.
+    /// Gets the current action interception mode.
+    /// </summary>
+    public ActionInterceptionMode GetCurrentMode() => Mode;
+
+    /// <summary>
+    /// Checks if Performance Mode is available and functioning.
+    /// </summary>
+    public bool IsPerformanceModeAvailable()
+    {
+        return ActionManager.Addresses.UseAction.Value != IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// Switches between action interception modes with proper hook management.
+    /// Icon Replacement: Changes hotbar icons via GetAdjustedActionId hook
+    /// Performance Mode: Direct action execution via UseAction hook for maximum performance
     /// </summary>
     public void SwitchMode(ActionInterceptionMode newMode)
     {
@@ -280,29 +385,57 @@ public sealed unsafe class ActionInterceptor : IDisposable
             return;
 
         var oldMode = Mode;
+        
+        // Disable current mode hooks
+        DisableCurrentModeHooks();
+        
+        // Switch mode
         Mode = newMode;
         
         // Clear cache when switching modes
         ClearCache();
         
-        // For now, we only have IconReplacement implemented
-        // PerformanceMode would require additional UseAction hooks
-        if (newMode == ActionInterceptionMode.PerformanceMode)
+        // Enable new mode hooks
+        switch (newMode)
         {
-            ModernActionCombo.PluginLog?.Warning("⚠️ Performance Mode not yet implemented - staying in Icon Replacement mode");
-            Mode = ActionInterceptionMode.IconReplacement;
-            return;
+            case ActionInterceptionMode.IconReplacement:
+                InitializeIconReplacementHook();
+                break;
+                
+            case ActionInterceptionMode.PerformanceMode:
+                InitializePerformanceModeHook();
+                break;
+                
+            default:
+                ModernActionCombo.PluginLog?.Warning($"⚠️ Unknown mode {newMode} - falling back to Icon Replacement");
+                Mode = ActionInterceptionMode.IconReplacement;
+                InitializeIconReplacementHook();
+                break;
         }
         
         ModernActionCombo.PluginLog?.Info($"🔄 Action interception mode: {oldMode} → {Mode}");
+    }
+    
+    private void DisableCurrentModeHooks()
+    {
+        try
+        {
+            _getAdjustedActionHook?.Disable();
+            _useActionHook?.Disable();
+        }
+        catch (Exception ex)
+        {
+            ModernActionCombo.PluginLog?.Error($"Error disabling current mode hooks: {ex}");
+        }
     }
 
     public void Dispose()
     {
         try
         {
-            _getAdjustedActionHook?.Disable();
+            DisableCurrentModeHooks();
             _getAdjustedActionHook?.Dispose();
+            _useActionHook?.Dispose();
             ClearCache();
             ModernActionCombo.PluginLog?.Info("ActionInterceptor disposed");
         }

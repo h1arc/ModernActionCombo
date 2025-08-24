@@ -4,9 +4,12 @@ using Dalamud.IoC;
 using Dalamud.Interface.Windowing;
 using ModernActionCombo.Core.Services;
 using ModernActionCombo.Core.Data;
+using ModernActionCombo.Core.Enums;
 using ModernActionCombo.UI.Windows;
 using Dalamud.Game.ClientState.Objects.Types;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using System.Reflection;
+using System;
 
 namespace ModernActionCombo;
 
@@ -26,11 +29,16 @@ public sealed class ModernActionCombo : IDalamudPlugin
     [PluginService] public static IGameInteropProvider GameInteropProvider { get; private set; } = null!;
     [PluginService] public static IJobGauges JobGauges { get; private set; } = null!;
     [PluginService] public static IDataManager DataManager { get; private set; } = null!;
+    [PluginService] public static IPartyList PartyList { get; private set; } = null!;
+    [PluginService] public static IObjectTable ObjectTable { get; private set; } = null!;
 
     private ActionInterceptor? _actionInterceptor;
+    private SmartTargetInterceptor? _smartTargetInterceptor;
     private GameState? _gameState;
     private readonly WindowSystem _windowSystem;
     private DebugPanelWindow? _debugWindow;
+    private JobConfigWindow? _configWindow;
+    private MainSettingsWindow? _mainSettingsWindow;
     private bool _initialized = false;
 
     // Movement detection via AgentMap (more reliable than position tracking)
@@ -68,8 +76,8 @@ public sealed class ModernActionCombo : IDalamudPlugin
         
         // Register UI with Dalamud (safe to do early)
         pluginInterface.UiBuilder.Draw += _windowSystem.Draw;
-        pluginInterface.UiBuilder.OpenConfigUi += () => EnsureInitialized(() => _debugWindow!.IsOpen = true);
-        pluginInterface.UiBuilder.OpenMainUi += () => EnsureInitialized(() => _debugWindow!.IsOpen = true);
+        pluginInterface.UiBuilder.OpenConfigUi += () => EnsureInitialized(() => _mainSettingsWindow!.IsOpen = true);
+        pluginInterface.UiBuilder.OpenMainUi += () => EnsureInitialized(() => _configWindow!.IsOpen = true);
         
         // Register commands (safe to do early)
         CommandManager.AddHandler("/mac", new Dalamud.Game.Command.CommandInfo(OnCommand)
@@ -80,6 +88,11 @@ public sealed class ModernActionCombo : IDalamudPlugin
         CommandManager.AddHandler("/modernactioncombo", new Dalamud.Game.Command.CommandInfo(OnCommand)
         {
             HelpMessage = "Open ModernActionCombo debug panel"
+        });
+        
+        CommandManager.AddHandler("/macconfig", new Dalamud.Game.Command.CommandInfo(OnConfigCommand)
+        {
+            HelpMessage = "Open ModernActionCombo job configuration"
         });
         
         // Use Framework.Update to initialize once the game is fully loaded
@@ -188,6 +201,18 @@ public sealed class ModernActionCombo : IDalamudPlugin
             // Update action cooldowns (THIS WAS MISSING!)
             UpdateActionCooldowns();
             
+            // Update party member data for SmartTargeting
+            UpdatePartyMembers();
+            
+            // Update hard target detection (needs to run every frame for responsive targeting)
+            if (ClientState.LocalPlayer != null)
+            {
+                UpdateSmartTargetHardTarget(ClientState.LocalPlayer);
+                
+                // Update companion scanning (secondary priority system)
+                UpdateCompanionDetection(ClientState.LocalPlayer);
+            }
+            
             // Update job-specific gauge data through registry
             JobProviderRegistry.UpdateActiveJobGauge();
         }
@@ -281,6 +306,378 @@ public sealed class ModernActionCombo : IDalamudPlugin
     }
 
     /// <summary>
+    /// Updates party member data for SmartTargeting.
+    /// Simplified version that works with available Dalamud APIs.
+    /// </summary>
+    private void UpdatePartyMembers()
+    {
+        try
+        {
+            var localPlayer = ClientState.LocalPlayer;
+            if (localPlayer == null)
+            {
+                return; // Not logged in
+            }
+            
+            var partyList = PartyList;
+            if (partyList == null || partyList.Length == 0)
+            {
+                // Solo play - just add self as party member
+                UpdateSoloPlayerData();
+                return;
+            }
+            
+            // Prepare data arrays for party members
+            Span<uint> memberIds = stackalloc uint[8];
+            Span<float> hpPercentages = stackalloc float[8];
+            Span<uint> statusFlags = stackalloc uint[8];
+            
+            byte memberCount = 0;
+            
+            // Process each party member
+            for (int i = 0; i < Math.Min(partyList.Length, 8); i++)
+            {
+                var member = partyList[i];
+                if (member?.GameObject == null) continue;
+                
+                var memberObject = member.GameObject;
+                
+                // 🔍 DEBUG: Log member info for troubleshooting
+                PluginLog.Debug($"Party member {i}: {memberObject.Name}, ID: {memberObject.GameObjectId:X}, " +
+                               $"ObjectKind: {memberObject.ObjectKind}, SubKind: {memberObject.SubKind}");
+                
+                // Convert GameObjectId to uint (truncate if necessary)
+                memberIds[memberCount] = (uint)(memberObject.GameObjectId & 0xFFFFFFFF);
+                
+                // Try to get HP data if it's a battle character
+                if (memberObject is IBattleChara battleChara)
+                {
+                    hpPercentages[memberCount] = battleChara.CurrentHp > 0 && battleChara.MaxHp > 0 
+                        ? (float)battleChara.CurrentHp / battleChara.MaxHp 
+                        : 0.0f;
+                }
+                else
+                {
+                    // Fallback for non-battle characters
+                    hpPercentages[memberCount] = 1.0f;
+                }
+                
+                // Build status flags
+                uint flags = 0;
+                
+                // Basic status checks
+                if (memberObject is IBattleChara bc && bc.CurrentHp > 0) 
+                    flags |= 1u << 0; // AliveFlag
+                else if (!(memberObject is IBattleChara))
+                    flags |= 1u << 0; // Assume alive if not a battle character
+                
+                // Range and LoS checks (simplified - assume true if in party)
+                flags |= 1u << 1; // InRangeFlag  
+                flags |= 1u << 2; // InLosFlag
+                flags |= 1u << 3; // TargetableFlag
+                
+                // Self check
+                if (memberObject.GameObjectId == localPlayer.GameObjectId)
+                    flags |= 1u << 4; // SelfFlag
+                
+                // Note: Hard target detection is now handled separately in UpdateSmartTargetHardTarget()
+                // No need to set HardTargetFlag here
+                
+                // Role flags based on job ID
+                var jobId = member.ClassJob.RowId;
+                if (JobHelper.IsTank(jobId)) flags |= 1u << 6; // TankFlag
+                else if (JobHelper.IsHealer(jobId)) flags |= 1u << 7; // HealerFlag
+                else if (JobHelper.IsDPS(jobId)) flags |= 1u << 8; // MeleeFlag (generic DPS)
+                
+                // 🔥 CRITICAL: AllyFlag for party members (was missing!)
+                // Party members are always allies and can receive healing
+                flags |= 1u << 10; // AllyFlag
+                
+                statusFlags[memberCount] = flags;
+                memberCount++;
+            }
+            
+            // Update SmartTargeting cache
+            SmartTargetingCache.UpdatePartyData(memberIds, hpPercentages, statusFlags, memberCount);
+            
+            // 🔍 DEBUG: Check for non-party targets (like chocobos)
+            CheckForNonPartyTargets(localPlayer, memberIds.Slice(0, memberCount));
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warning($"Error updating party members: {ex.Message}");
+            // Fallback to solo mode
+            UpdateSoloPlayerData();
+        }
+    }
+
+    /// <summary>
+    /// Checks for non-party targets like chocobos, minions, etc. that might be valid heal targets.
+    /// These don't show up in the party list but can be manually targeted.
+    /// </summary>
+    private void CheckForNonPartyTargets(Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter localPlayer, ReadOnlySpan<uint> partyMemberIds)
+    {
+        var currentTarget = localPlayer.TargetObject;
+        
+        PluginLog.Debug($"🐦 CheckForNonPartyTargets called - Target: {currentTarget?.Name ?? "NULL"}");
+        
+        if (currentTarget == null) return;
+        
+        var targetId = (uint)(currentTarget.GameObjectId & 0xFFFFFFFF);
+        
+        // Skip if target is already in party
+        for (int i = 0; i < partyMemberIds.Length; i++)
+        {
+            if (partyMemberIds[i] == targetId)
+            {
+                PluginLog.Debug($"🐦 Target {currentTarget.Name} is already in party, skipping");
+                return;
+            }
+        }
+        
+        // This is a non-party target - log details for debugging
+        PluginLog.Warning($"🐦 Non-party target detected: {currentTarget.Name}, ID: {targetId:X}, " +
+                       $"ObjectKind: {currentTarget.ObjectKind}, SubKind: {currentTarget.SubKind}");
+        
+        // Check if it's a chocobo or other companion
+        if (currentTarget.Name.ToString().Contains("Chocobo") || 
+            currentTarget.ObjectKind.ToString().Contains("Companion"))
+        {
+            PluginLog.Warning($"🐦 CHOCOBO/COMPANION DETECTED: {currentTarget.Name} - this needs special handling for smart targeting!");
+        }
+    }
+
+    /// <summary>
+    /// Updates party data for solo play (just the local player).
+    /// </summary>
+    private void UpdateSoloPlayerData()
+    {
+        var localPlayer = ClientState.LocalPlayer;
+        if (localPlayer == null) return;
+        
+        Span<uint> memberIds = stackalloc uint[1];
+        Span<float> hpPercentages = stackalloc float[1];
+        Span<uint> statusFlags = stackalloc uint[1];
+        
+        memberIds[0] = (uint)(localPlayer.GameObjectId & 0xFFFFFFFF);
+        hpPercentages[0] = localPlayer.CurrentHp > 0 && localPlayer.MaxHp > 0 
+            ? (float)localPlayer.CurrentHp / localPlayer.MaxHp 
+            : 1.0f;
+        
+        // Solo player flags: Alive + InRange + InLoS + Targetable + Self + Ally
+        uint flags = (1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) | (1u << 4) | (1u << 10);
+        
+        // Add role flag
+        var jobId = localPlayer.ClassJob.RowId;
+        if (JobHelper.IsTank(jobId)) flags |= 1u << 6;
+        else if (JobHelper.IsHealer(jobId)) flags |= 1u << 7;
+        else if (JobHelper.IsDPS(jobId)) flags |= 1u << 8;
+        
+        statusFlags[0] = flags;
+        
+        SmartTargetingCache.UpdatePartyData(memberIds, hpPercentages, statusFlags, 1);
+    }
+    
+    /// <summary>
+    /// Updates the hard target tracking for SmartTargeting.
+    /// Modern approach: Use ActionManager.CanUseActionOnTarget() for validation.
+    /// This handles ALL the complexity - range, LoS, friend/foe, chocobo support, etc.
+    /// </summary>
+    private void UpdateSmartTargetHardTarget(Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter localPlayer)
+    {
+        var currentTarget = localPlayer?.TargetObject;
+        if (currentTarget == null)
+        {
+            SmartTargetingCache.UpdateHardTarget(0, false);
+            return;
+        }
+        
+        var targetId = (uint)(currentTarget.GameObjectId & 0xFFFFFFFF);
+        
+        // Modern validation: Let the game engine decide if we can use healing abilities on this target
+        // This automatically handles: chocobos, companions, party members, range, LoS, friend/foe, etc.
+        bool canHeal = CanUseHealingActionOnTarget(currentTarget);
+        
+        // Special handling for BattleNpc targets (like chocobos)
+        if (currentTarget.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc && localPlayer != null)
+        {
+            bool isChocobo = IsPlayerChocobo(currentTarget, localPlayer);
+            bool chocoboTargetingEnabled = GetChocoboTargetingSetting();
+            
+            // Override canHeal for chocobos based on setting
+            if (isChocobo)
+            {
+                canHeal = canHeal && chocoboTargetingEnabled;
+            }
+        }
+        
+        SmartTargetingCache.UpdateHardTarget(targetId, canHeal);
+    }
+    
+    /// <summary>
+    /// Check if we can use healing actions on a target using game engine validation.
+    /// Uses ActionManager.CanUseActionOnTarget() which handles all edge cases.
+    /// </summary>
+    private unsafe bool CanUseHealingActionOnTarget(Dalamud.Game.ClientState.Objects.Types.IGameObject target)
+    {
+        // Test with a basic healing action (Cure - available at level 2, minimal requirements)
+        const uint CureActionId = 120; // WHM Cure
+        
+        try
+        {
+            // Use the game's own action validation system
+            // Cast to ClientStructs GameObject pointer
+            var gameObjectPtr = (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)target.Address;
+            bool canUse = FFXIVClientStructs.FFXIV.Client.Game.ActionManager.CanUseActionOnTarget(CureActionId, gameObjectPtr);
+            return canUse;
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warning($"🎯 Error checking CanUseActionOnTarget for {target.Name}: {ex.Message}");
+            return false;
+        }
+    }
+    
+    /// <summary>
+    /// Check if a BattleNpc target is the player's chocobo.
+    /// Uses reflection-based ownership detection with name-based fallback.
+    /// </summary>
+    private bool IsPlayerChocobo(Dalamud.Game.ClientState.Objects.Types.IGameObject target, Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter localPlayer)
+    {
+        // Check if it's a BattleNpc (chocobos are BattleNpcs)
+        if (target.ObjectKind != Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc)
+            return false;
+            
+        // Use reflection to check OwnerId if available
+        try
+        {
+            var ownerIdProperty = target.GetType().GetProperty("OwnerId");
+            if (ownerIdProperty != null)
+            {
+                var ownerId = (uint?)ownerIdProperty.GetValue(target);
+                if (ownerId == localPlayer.GameObjectId)
+                {
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Debug($"🔍 Reflection failed for {target.Name}: {ex.Message}");
+        }
+        
+        // Fallback: name-based detection for edge cases
+        var targetName = target.Name.ToString().ToLower();
+        var playerName = localPlayer.Name.ToString().ToLower();
+        
+        if (!string.IsNullOrEmpty(playerName) && 
+            targetName.Contains(playerName) && 
+            targetName.Contains("chocobo"))
+        {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /// <summary>
+    /// Get the chocobo targeting setting for WHM.
+    /// </summary>
+    private bool GetChocoboTargetingSetting()
+    {
+        var jobConfig = ConfigurationManager.GetJobConfiguration(24); // WHM
+        return jobConfig.GetSetting("SmartTargetIncludeChocobos", false);
+    }
+    
+    /// <summary>
+    /// Updates companion detection for secondary priority system.
+    /// Scans nearby objects for player-owned companions (chocobos, etc.)
+    /// that are not in the party but can receive healing.
+    /// </summary>
+    private void UpdateCompanionDetection(Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter localPlayer)
+    {
+        try
+        {
+            bool companionTargetingEnabled = GetChocoboTargetingSetting();
+            bool inDuty = ClientState.IsPvP || (Condition != null && Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.BoundByDuty]);
+            
+            // Update companion system state for fast exit paths
+            SmartTargetingCache.UpdateCompanionSystemState(companionTargetingEnabled, inDuty);
+            
+            // Fast exit: Setting disabled or in duty
+            if (!companionTargetingEnabled || inDuty)
+            {
+                SmartTargetingCache.UpdateCompanionData(0, 1.0f, false);
+                return;
+            }
+            
+            uint bestCompanionId = 0;
+            float bestCompanionHp = 1.0f; // Start with full HP
+            bool foundValidCompanion = false;
+            
+            // Scan nearby objects for companions
+            var gameObjects = ObjectTable?.Where(o => o != null && o.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.BattleNpc);
+            if (gameObjects != null)
+            {
+                foreach (var obj in gameObjects)
+                {
+                    // Check if this is a player-owned companion
+                    if (IsPlayerChocobo(obj, localPlayer))
+                    {
+                        // Check if we can heal it
+                        bool canHeal = CanUseHealingActionOnTarget(obj);
+                        
+                        if (canHeal)
+                        {
+                            // Get HP percentage
+                            float hpPercent = GetHpPercentage(obj);
+                            
+                            // Take the companion with the lowest HP
+                            if (hpPercent < bestCompanionHp)
+                            {
+                                bestCompanionId = (uint)(obj.GameObjectId & 0xFFFFFFFF);
+                                bestCompanionHp = hpPercent;
+                                foundValidCompanion = true;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Update companion cache with best companion found (or clear if none)
+            SmartTargetingCache.UpdateCompanionData(bestCompanionId, bestCompanionHp, foundValidCompanion);
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warning($"🐎 Error in companion detection: {ex.Message}");
+            // Clear companion data on error
+            SmartTargetingCache.UpdateCompanionData(0, 1.0f, false);
+        }
+    }
+    
+    /// <summary>
+    /// Get HP percentage for any game object.
+    /// </summary>
+    private float GetHpPercentage(Dalamud.Game.ClientState.Objects.Types.IGameObject obj)
+    {
+        try
+        {
+            if (obj is Dalamud.Game.ClientState.Objects.Types.IBattleChara battleChara)
+            {
+                if (battleChara.MaxHp > 0)
+                {
+                    return (float)battleChara.CurrentHp / battleChara.MaxHp;
+                }
+            }
+            return 1.0f; // Default to full HP if we can't read it
+        }
+        catch
+        {
+            return 1.0f; // Default to full HP on error
+        }
+    }
+
+    /// <summary>
     /// Performs the actual initialization once the game is loaded and services are ready.
     /// </summary>
     private void PerformDeferredInitialization()
@@ -299,16 +696,29 @@ public sealed class ModernActionCombo : IDalamudPlugin
         // Initialize core systems
         _gameState = new GameState(ClientState, Condition);
         _actionInterceptor = new ActionInterceptor(_gameState, GameInteropProvider);
+        _smartTargetInterceptor = new SmartTargetInterceptor();
         
         // Initialize the new grid-based combo system
         JobProviderRegistry.Initialize();
         PluginLog.Information("✓ Grid-based combo system initialized");
+        
+        // Initialize configuration system with defaults
+        ConfigurationManager.InitializeDefaults();
+        PluginLog.Information("✓ Configuration system initialized with defaults");
+        
         PluginLog.Information("✓ Action interceptor initialized");
+        PluginLog.Information("✓ Smart target interceptor initialized");
         
         // Initialize UI system
         _debugWindow = new DebugPanelWindow(_actionInterceptor, _gameState);
+        _configWindow = new JobConfigWindow(_actionInterceptor, _gameState, _windowSystem);
+        _mainSettingsWindow = new MainSettingsWindow(_actionInterceptor, _gameState, _windowSystem);
         _windowSystem.AddWindow(_debugWindow);
+        _windowSystem.AddWindow(_configWindow);
+        _windowSystem.AddWindow(_mainSettingsWindow);
         PluginLog.Information("✓ Debug panel UI ready - use /mac to open");
+        PluginLog.Information("✓ Configuration UI ready - use /macconfig to open");
+        PluginLog.Information("✓ Main settings UI ready - access via plugin config menu");
         
         _initialized = true;
         PluginLog.Information("=== ModernActionCombo Ready ===");
@@ -338,6 +748,18 @@ public sealed class ModernActionCombo : IDalamudPlugin
         {
             _debugWindow!.IsOpen = !_debugWindow.IsOpen;
             PluginLog.Information($"Debug panel toggled: {(_debugWindow.IsOpen ? "Open" : "Closed")}");
+        });
+    }
+    
+    /// <summary>
+    /// Command handler for configuration window commands.
+    /// </summary>
+    private void OnConfigCommand(string command, string args)
+    {
+        EnsureInitialized(() =>
+        {
+            _configWindow!.IsOpen = !_configWindow.IsOpen;
+            PluginLog.Information($"Configuration window toggled: {(_configWindow.IsOpen ? "Open" : "Closed")}");
         });
     }
 
@@ -478,12 +900,16 @@ public sealed class ModernActionCombo : IDalamudPlugin
         // Clean up commands
         CommandManager?.RemoveHandler("/mac");
         CommandManager?.RemoveHandler("/modernactioncombo");
+        CommandManager?.RemoveHandler("/macconfig");
         
         // Clean up UI (only if initialized)
         if (_initialized)
         {
             _debugWindow?.Dispose();
+            _configWindow?.Dispose();
+            _mainSettingsWindow?.Dispose();
             _actionInterceptor?.Dispose();
+            _smartTargetInterceptor?.Dispose();
             GameStateCache.Dispose();
         }
         

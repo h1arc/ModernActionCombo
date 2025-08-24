@@ -121,9 +121,16 @@ public readonly struct ComboGrid
     /// <summary>
     /// Evaluates the priority rules for the given game state.
     /// Returns the first matching rule's action, or the original action if no rules match.
+    /// Configuration checking is handled by the ConfigAwareActionCache in ActionInterceptor.
     /// </summary>
     public uint Evaluate(uint originalActionId, GameStateData gameState)
     {
+        // Check if this combo grid is enabled in configuration
+        if (!ConfigurationManager.IsComboGridEnabled(gameState.JobId, Name))
+        {
+            return originalActionId; // Grid disabled, return original action
+        }
+        
         for (int i = 0; i < Rules.Length; i++)
         {
             var rule = Rules[i];

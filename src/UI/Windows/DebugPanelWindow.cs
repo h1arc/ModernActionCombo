@@ -2,9 +2,11 @@ using System;
 using System.Numerics;
 using Dalamud.Interface.Windowing;
 using Dalamud.Interface.Colors;
+using Dalamud.Interface.Utility.Raii;
 using Dalamud.Bindings.ImGui;
 using ModernActionCombo.Core.Services;
 using ModernActionCombo.Core.Data;
+using ModernActionCombo.UI.Components;
 
 namespace ModernActionCombo.UI.Windows;
 
@@ -36,54 +38,53 @@ public class DebugPanelWindow : Window, IDisposable
         
         // Combat state section
         ImGui.TextColored(new Vector4(1.0f, 0.8f, 0.2f, 1.0f), "Combat State:");
-        ImGui.Indent();
-        ImGui.Text($"Next Ability: {GetNextAbility()}");
-        ImGui.Unindent();
+        using (var indent1 = ImRaiiComponents.BeginIndent())
+        {
+            ImGui.Text($"Next Ability: {GetNextAbility()}");
+        }
         ImGui.Spacing();
         
         // Job gauge section - generic display
         ImGui.TextColored(new Vector4(1.0f, 0.8f, 0.2f, 1.0f), "Job Gauge:");
-        ImGui.Indent();
-        
-        // Generic gauge data display
-        var gaugeData1 = GameStateCache.GetGaugeData1();
-        var gaugeData2 = GameStateCache.GetGaugeData2();
-        
-        ImGui.Text($"Gauge1: {gaugeData1}");
-        ImGui.Text($"Gauge2: {gaugeData2}");
-        
-        ImGui.Unindent();
+        using (var indent2 = ImRaiiComponents.BeginIndent())
+        {
+            // Generic gauge data display
+            var gaugeData1 = GameStateCache.GetGaugeData1();
+            var gaugeData2 = GameStateCache.GetGaugeData2();
+            
+            ImGui.Text($"Gauge1: {gaugeData1}");
+            ImGui.Text($"Gauge2: {gaugeData2}");
+        }
         ImGui.Spacing();
         
         // Timers section - generic tracking data
         ImGui.TextColored(new Vector4(1.0f, 0.8f, 0.2f, 1.0f), "Tracking Data:");
-        ImGui.Indent();
-        
-        // Show generic tracking info for active job
-        var activeProvider = JobProviderRegistry.GetActiveProvider();
-        if (activeProvider != null)
+        using (var indent = ImRaiiComponents.BeginIndent())
         {
-            ImGui.Text($"Active Job Provider: {activeProvider.GetType().Name}");
+            // Show generic tracking info for active job
+            var activeProvider = JobProviderRegistry.GetActiveProvider();
+            if (activeProvider != null)
+            {
+                ImGui.Text($"Active Job Provider: {activeProvider.GetType().Name}");
+            }
+            else
+            {
+                ImGui.TextColored(new Vector4(0.6f, 0.6f, 0.6f, 1.0f), "No active job provider");
+            }
+            
+            // Movement and state tracking
+            var movingColor = GameStateCache.IsMoving ? new Vector4(0.2f, 1.0f, 0.2f, 1.0f) : new Vector4(0.8f, 0.8f, 0.8f, 1.0f);
+            var movingText = GameStateCache.IsMoving ? "Moving" : "Stationary";
+            ImGui.TextColored(movingColor, $"Movement: {movingText}");
+            
+            // Additional game state info
+            var combatColor = GameStateCache.InCombat ? new Vector4(1.0f, 0.4f, 0.4f, 1.0f) : new Vector4(0.8f, 0.8f, 0.8f, 1.0f);
+            var combatText = GameStateCache.InCombat ? "In Combat" : "Out of Combat";
+            ImGui.TextColored(combatColor, $"Combat: {combatText}");
+            
+            ImGui.Text($"Level: {GameStateCache.Level}");
+            ImGui.Text($"Current MP: {GameStateCache.CurrentMp} / {GameStateCache.MaxMp}");
         }
-        else
-        {
-            ImGui.TextColored(new Vector4(0.6f, 0.6f, 0.6f, 1.0f), "No active job provider");
-        }
-        
-        // Movement and state tracking
-        var movingColor = GameStateCache.IsMoving ? new Vector4(0.2f, 1.0f, 0.2f, 1.0f) : new Vector4(0.8f, 0.8f, 0.8f, 1.0f);
-        var movingText = GameStateCache.IsMoving ? "Moving" : "Stationary";
-        ImGui.TextColored(movingColor, $"Movement: {movingText}");
-        
-        // Additional game state info
-        var combatColor = GameStateCache.InCombat ? new Vector4(1.0f, 0.4f, 0.4f, 1.0f) : new Vector4(0.8f, 0.8f, 0.8f, 1.0f);
-        var combatText = GameStateCache.InCombat ? "In Combat" : "Out of Combat";
-        ImGui.TextColored(combatColor, $"Combat: {combatText}");
-        
-        ImGui.Text($"Level: {GameStateCache.Level}");
-        ImGui.Text($"Current MP: {GameStateCache.CurrentMp} / {GameStateCache.MaxMp}");
-        
-        ImGui.Unindent();
         ImGui.Spacing();
         
         // Debug info section
@@ -100,20 +101,46 @@ public class DebugPanelWindow : Window, IDisposable
         
         // Mode selection
         var isPerformanceMode = ActionInterceptor.Mode == ActionInterceptionMode.PerformanceMode;
-        if (ImGui.Checkbox("Performance Mode (UseAction)", ref isPerformanceMode))
+        var performanceModeAvailable = _actionInterceptor.IsPerformanceModeAvailable();
+        
+        if (!performanceModeAvailable)
         {
-            var newMode = isPerformanceMode ? ActionInterceptionMode.PerformanceMode : ActionInterceptionMode.IconReplacement;
-            _actionInterceptor.SwitchMode(newMode);
-            ModernActionCombo.PluginLog?.Info($"Action mode switched to: {newMode}");
+            ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.DalamudGrey3);
+        }
+        
+        if (ImGui.Checkbox("Performance Mode (Direct Input)", ref isPerformanceMode))
+        {
+            if (performanceModeAvailable)
+            {
+                var newMode = isPerformanceMode ? ActionInterceptionMode.PerformanceMode : ActionInterceptionMode.IconReplacement;
+                _actionInterceptor.SwitchMode(newMode);
+                ModernActionCombo.PluginLog?.Info($"Action mode switched to: {newMode}");
+            }
+            else
+            {
+                ModernActionCombo.PluginLog?.Warning("Performance Mode not available - UseAction address not found");
+            }
+        }
+        
+        if (!performanceModeAvailable)
+        {
+            ImGui.PopStyleColor();
         }
         ImGui.SameLine();
         ImGui.TextColored(new Vector4(0.7f, 0.7f, 0.7f, 1.0f), "(?)");
         if (ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip("Icon Replacement: Changes action icons (safer, current implementation)\nPerformance Mode: Direct action replacement (not yet implemented)");
+            if (performanceModeAvailable)
+            {
+                ImGui.SetTooltip("Icon Replacement: Changes action icons on hotbar (traditional mode)\nPerformance Mode: Direct action execution for maximum speed");
+            }
+            else
+            {
+                ImGui.SetTooltip("Performance Mode not available - UseAction address not found\nUsing Icon Replacement mode only");
+            }
         }
 
-        var currentMode = ActionInterceptor.Mode == ActionInterceptionMode.PerformanceMode ? "Performance Mode (UseAction)" : "Icon Replacement (GetAdjustedActionId)";
+        var currentMode = ActionInterceptor.Mode == ActionInterceptionMode.PerformanceMode ? "Performance Mode (Direct Execution)" : "Icon Replacement (Traditional)";
         ImGui.Text($"Current Mode: {currentMode}");
         
         if (ImGui.Button("Clear Action Cache"))
@@ -148,8 +175,6 @@ public class DebugPanelWindow : Window, IDisposable
         {
             ImGui.TextColored(new Vector4(0.6f, 0.6f, 0.6f, 1.0f), "Gauge Status: Empty");
         }
-
-        ImGui.End();
     }
     
     private string GetNextAbility()

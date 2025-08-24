@@ -636,7 +636,56 @@ public static unsafe class GameStateCache
         {
             NativeMemory.AlignedFree(_coreState);
         }
+        
+        // Cleanup SmartTargeting memory
+        SmartTargetingCache.Dispose();
     }
+    
+    #endregion
+    
+    #region SmartTargeting Integration
+    
+    /// <summary>
+    /// Gets the best smart target using percentage-based healing decisions.
+    /// More fair across different job HP pools (tank vs caster equality).
+    /// Default 1.0f threshold means anyone with ANY missing HP is eligible.
+    /// Integrates with SmartTargetingCache for sub-50ns performance.
+    /// Priority: Hard Target > Best Party Member > Self
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static uint GetSmartTarget(float hpThreshold = 1.0f) =>
+        SmartTargetingCache.GetSmartTarget(hpThreshold);
+    
+    /// <summary>
+    /// Check if SmartTargeting is ready and has valid party data.
+    /// </summary>
+    public static bool IsSmartTargetingReady => SmartTargetingCache.IsReady;
+    
+    /// <summary>
+    /// Hard target detection is now automatic via status flags.
+    /// This method is kept for compatibility but does nothing.
+    /// Hard targets are detected automatically when UpdateSmartTargetData is called.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void SetSmartTargetHardTarget(uint memberId)
+    {
+        // No-op: Hard targets are now detected automatically from status flags
+        // The game will set the HardTargetFlag in the status when calling UpdateSmartTargetData
+    }
+    
+    /// <summary>
+    /// Check if a specific target is valid for smart targeting.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsValidSmartTarget(uint memberId) =>
+        SmartTargetingCache.IsValidTarget(memberId);
+    
+    /// <summary>
+    /// Check if a specific target needs healing below the threshold.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TargetNeedsHealing(uint memberId, float threshold = 0.95f) =>
+        SmartTargetingCache.NeedsHealing(memberId, threshold);
     
     #endregion
 }

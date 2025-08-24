@@ -17,6 +17,11 @@ public class HotPathPerformanceBenchmarks
 
     public HotPathPerformanceBenchmarks()
     {
+        // Initialize basic configuration state without Dalamud dependencies
+        // Just ensure combo grids are enabled for testing
+        var config = ConfigurationManager.GetJobConfiguration(24); // WHM
+        config.SetComboGridEnabled("Single Target DPS", true);
+        
         _provider = new WHMProvider();
         
         // Mock the GameStateCache level to ensure consistent behavior

@@ -387,3 +387,4 @@ packages/
 
 lib/
 src/Benchmarks
+log_dump.txt

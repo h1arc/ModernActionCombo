@@ -21,16 +21,27 @@ public static class WHMConstants
     private static readonly byte[] AoELevels = [45, 82];
     
     // Direct constants for most-used actions
-    public const uint Stone3 = 3568;
     public const uint Glare3 = 25859;
     public const uint Glare4 = 37009;    // Only usable with Sacred Sight buff
     public const uint Dia = 16532;
-    public const uint Holy = 139;
     public const uint AfflatusMisery = 16535;   // Blood Lily - DPS ability
     public const uint AfflatusSolace = 16531;   // Healing Lily - Single target heal
     public const uint AfflatusRapture = 16534;  // Healing Lily - AoE heal
     public const uint PresenceOfMind = 136;
     public const uint LucidDreaming = 7562; // Lucid Dreaming - MP regen ability
+
+    public const uint Cure = 120;
+    public const uint Cure2 = 135;
+    public const uint Cure3 = 131;
+    public const uint Regen = 137;
+    public const uint Raise = 125;
+    public const uint Benediction = 140;
+    public const uint Tetragrammaton = 3570;
+    public const uint DivineBenison = 7432;
+    public const uint Aquaveil = 25861;
+    public const uint Asylum = 3569;
+    public const uint LiturgyOfTheBell = 25862;
+    public const uint LiturgyOfTheBellBurst = 28509;
     #endregion
 
     #region GameStateCache Integration
@@ -153,7 +164,8 @@ public static class WHMConstants
     // Buff IDs  
     public const uint PresenceOfMindBuffId = 157;
     public const uint SacredSightBuffId = 3879;
-    
+    public const uint LiturgyOfTheBellBuffId = 2709;
+
     // Assize 
     public const uint Assize = 3571;
     
@@ -172,10 +184,11 @@ public static class WHMConstants
     /// All WHM player buffs that should be tracked.
     /// Used by GameStateCache initialization.
     /// </summary>
-    public static readonly uint[] BuffsToTrack = 
+    public static readonly uint[] BuffsToTrack =
     [
         PresenceOfMindBuffId,   // 157 - Presence of Mind
         SacredSightBuffId,      // 3879 - Sacred Sight
+        LiturgyOfTheBellBuffId, // 2709 - Liturgy of the Bell
     ];
     
     /// <summary>
