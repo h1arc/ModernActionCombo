@@ -19,15 +19,18 @@ namespace ModernActionCombo.UI.Windows;
 /// 
 /// ✅ STANDARDIZED APPROACH (Use this for all jobs):
 /// - Job Overview tab: Shows current job status and all supported jobs list
-/// - {JobName} tab: Shows embedded job-specific configuration (when current job is supported)
+/// - {JobName} tab: Shows all job-specific configuration in a single scrollable interface
 /// - Global Controls tab: Shows global controls and debug tools
 /// 
-/// All job configuration should be embedded directly in the {JobName} tab using sub-tabs:
-/// - Combos & Rotations: Combo grids, oGCD rules, smart target rules
-/// - {JobName} Settings: Job-specific advanced settings 
+/// All job configuration is embedded directly in the {JobName} tab in sections:
+/// - Combo Grids: Combo configuration options
+/// - oGCD Configuration: oGCD rules and settings  
+/// - Smart Target Configuration: Smart targeting rules
+/// - Advanced Settings: Job-specific advanced settings
 /// - Controls: Job-specific controls and debug tools
 /// 
 /// ❌ DO NOT create separate job-specific configuration windows.
+/// ❌ DO NOT use sub-tabs within job tabs (consolidated approach).
 /// ❌ DO NOT use the "Configure" button approach (deprecated).
 /// 
 /// This provides a consistent, centralized user experience across all jobs.
@@ -35,7 +38,6 @@ namespace ModernActionCombo.UI.Windows;
 public class JobConfigWindow : Window, IDisposable
 {
     private readonly ActionInterceptor _actionInterceptor;
-    private readonly GameState _gameState;
     private readonly WindowSystem _windowSystem;
     private bool _disposed = false;
     
@@ -50,11 +52,10 @@ public class JobConfigWindow : Window, IDisposable
         ("Astrologian", 33, false)
     };
 
-    public JobConfigWindow(ActionInterceptor actionInterceptor, GameState gameState, WindowSystem windowSystem) 
-        : base("ModernActionCombo - Job Configuration###MacJobConfig")
+    public JobConfigWindow(ActionInterceptor actionInterceptor, WindowSystem windowSystem) 
+        : base("MAC/Job Configuration###MacJobConfig")
     {
         _actionInterceptor = actionInterceptor ?? throw new ArgumentNullException(nameof(actionInterceptor));
-        _gameState = gameState ?? throw new ArgumentNullException(nameof(gameState));
         _windowSystem = windowSystem ?? throw new ArgumentNullException(nameof(windowSystem));
 
         Size = new Vector2(500, 350);
@@ -165,50 +166,50 @@ public class JobConfigWindow : Window, IDisposable
     
     /// <summary>
     /// Draws embedded WHM configuration content (green box content).
+    /// All WHM settings consolidated into a single tab.
     /// </summary>
     private void DrawWHMConfigEmbedded()
     {
-        // Use proper tab organization like the separate WHM config window
-        if (ImGui.BeginTabBar("WHMConfigTabs"))
-        {
-            // Combos & Rotations Tab
-            if (ImGui.BeginTabItem("Combos & Rotations"))
-            {
-                ImGui.Spacing();
-                DrawWHMComboConfiguration();
-                ImGui.Spacing();
-                ImGui.Separator();
-                ImGui.Spacing();
-                DrawWHMOGCDConfiguration();
-                ImGui.Spacing();
-                ImGui.Separator();
-                ImGui.Spacing();
-                DrawWHMSmartTargetConfiguration();
-                ImGui.EndTabItem();
-            }
-            
-            // WHM Settings Tab
-            if (ImGui.BeginTabItem("WHM Settings"))
-            {
-                ImGui.Spacing();
-                DrawWHMAdvancedSettings();
-                ImGui.EndTabItem();
-            }
-            
-            // Controls Tab
-            if (ImGui.BeginTabItem("Controls"))
-            {
-                ImGui.Spacing();
-                DrawWHMControls();
-                ImGui.Spacing();
-                ImGui.Separator();
-                ImGui.Spacing();
-                DrawWHMDebugSection();
-                ImGui.EndTabItem();
-            }
-            
-            ImGui.EndTabBar();
-        }
+        // All WHM configuration in a single scrollable area
+        
+        // Combos & Rotations Section
+        ImRaiiComponents.SectionHeader("Combo Grids:", new Vector4(0.3f, 0.8f, 1.0f, 1.0f));
+        DrawWHMComboConfiguration();
+        
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        
+        // oGCD Configuration Section
+        DrawWHMOGCDConfiguration();
+        
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        
+        // Smart Target Configuration Section
+        DrawWHMSmartTargetConfiguration();
+        
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        
+        // Advanced Settings Section
+        // ImRaiiComponents.SectionHeader("Advanced WHM Settings:", new Vector4(1.0f, 0.8f, 0.3f, 1.0f));
+        DrawWHMAdvancedSettings();
+        
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        
+        // Controls Section
+        // ImRaiiComponents.SectionHeader("WHM Controls:", new Vector4(0.8f, 0.3f, 1.0f, 1.0f));
+        DrawWHMControls();
+        
+        ImGui.Spacing();
+        
+        // Debug Section
+        DrawWHMDebugSection();
     }
     
     /// <summary>
@@ -223,8 +224,6 @@ public class JobConfigWindow : Window, IDisposable
         {
             var comboGrids = comboProvider.GetComboGrids();
             
-            ImRaiiComponents.SectionHeader("Combo Grids:");
-            
             // Check if the provider supports named combo rules for individual controls
             INamedComboRulesProvider? comboRulesProvider = provider as INamedComboRulesProvider;
             IReadOnlyDictionary<string, IReadOnlyList<NamedComboRule>>? namedComboRules = null;
@@ -233,25 +232,27 @@ public class JobConfigWindow : Window, IDisposable
                 namedComboRules = comboRulesProvider.GetNamedComboRules();
             }
             
-            foreach (var grid in comboGrids)
+            for (int gi = 0; gi < comboGrids.Count; gi++)
             {
-                // Main grid checkbox
+                var grid = comboGrids[gi];
+                // Main grid checkbox with numbering; keep a stable ID using ## suffix
                 var isGridEnabled = jobConfig.IsComboGridEnabled(grid.Name);
-                
-                if (ImGui.Checkbox($"Enable {grid.Name}", ref isGridEnabled))
+                var gridLabel = $"{gi + 1}. {grid.Name}##ComboGrid_{grid.Name}";
+
+                if (ImGui.Checkbox(gridLabel, ref isGridEnabled))
                 {
                     ConfigurationManager.SetComboGridEnabled(24, grid.Name, isGridEnabled);
-                    
+
                     // Refresh combo rules if supported
                     if (comboRulesProvider != null)
                     {
                         comboRulesProvider.RefreshComboRules();
                     }
-                    
+
                     var status = isGridEnabled ? "enabled" : "disabled";
                     ModernActionCombo.PluginLog?.Info($"White Mage '{grid.Name}' combo {status}");
                 }
-                
+
                 // Show grid details
                 using (var gridIndent = ImRaiiComponents.BeginIndent())
                 {
@@ -260,19 +261,22 @@ public class JobConfigWindow : Window, IDisposable
                     {
                         ImGui.Spacing();
                         using var rulesIndent = ImRaiiComponents.BeginIndent();
-                        
-                        foreach (var namedRule in gridRules)
+
+                        for (int i = 0; i < gridRules.Count; i++)
                         {
+                            var namedRule = gridRules[i];
                             var isRuleEnabled = jobConfig.IsComboRuleEnabled(grid.Name, namedRule.Name);
-                            var tempEnabled = isRuleEnabled; // Create a temp variable for ImGui
-                            
-                            if (ImGui.Checkbox($"{namedRule.Name}##ComboRule_{grid.Name}_{namedRule.Name}", ref tempEnabled))
+                            var tempEnabled = isRuleEnabled; // temp for ImGui
+
+                            // Visible label is numbered; ID remains stable via the ## suffix
+                            var label = $"{i + 1}. {namedRule.Name}##ComboRule_{grid.Name}_{namedRule.Name}";
+                            if (ImGui.Checkbox(label, ref tempEnabled))
                             {
                                 ConfigurationManager.SetComboRuleEnabled(24, grid.Name, namedRule.Name, tempEnabled);
-                                
+
                                 // Refresh the combo rules in the provider
                                 comboRulesProvider?.RefreshComboRules();
-                                
+
                                 var status = tempEnabled ? "enabled" : "disabled";
                                 ModernActionCombo.PluginLog?.Info($"White Mage combo rule '{grid.Name}.{namedRule.Name}' {status}");
                             }
@@ -321,7 +325,7 @@ public class JobConfigWindow : Window, IDisposable
         {
             ImGui.Spacing();
             using var indent = ImRaiiComponents.BeginIndent();
-            ImGui.TextColored(new Vector4(0.7f, 0.7f, 0.7f, 1.0f), "Individual oGCD Rules:");
+            ImGui.TextColored(new Vector4(0.7f, 0.7f, 0.7f, 1.0f), "The following will be used for calculating optimal oGCD usage:");
             
             var ogcdRules = whmProvider.GetOGCDRules();
             
@@ -356,7 +360,7 @@ public class JobConfigWindow : Window, IDisposable
         ImRaiiComponents.SectionHeader("Smart Target Configuration:", new Vector4(0.3f, 1.0f, 0.6f, 1.0f));
         
         // Overall smart targeting enable toggle
-        var smartTargetingEnabled = ConfigurationManager.IsSmartTargetingEnabled(24);
+    var smartTargetingEnabled = ConfigurationManager.IsSmartTargetingEnabled(24);
         if (ImRaiiComponents.LabeledCheckbox(
             "Enable Smart Targeting", "",
             ref smartTargetingEnabled))
@@ -368,7 +372,7 @@ public class JobConfigWindow : Window, IDisposable
             {
                 WHMProvider.RefreshSmartTargetRulesStatic();
             }
-            
+
             var status = smartTargetingEnabled ? "enabled" : "disabled";
             ModernActionCombo.PluginLog?.Info($"White Mage smart targeting globally {status}");
         }
@@ -378,7 +382,8 @@ public class JobConfigWindow : Window, IDisposable
         {
             ImGui.Spacing();
             using var indent = ImRaiiComponents.BeginIndent();
-            ImGui.TextColored(new Vector4(0.7f, 0.7f, 0.7f, 1.0f), "The following abilities will resolve according to the following rule:\nHard Target > Ally if Missing HP% > Self");
+            ImGui.TextColored(new Vector4(0.7f, 0.7f, 0.7f, 1.0f), "The following abilities will resolve according to the following rule:"
+                + "\nHard Target > Ally if Missing HP% > Self\nEsuna will smart target if there is a party member with an effect that can be cleansed.");
             ImGui.Spacing();
 
             var smartTargetRules = smartTargetProvider.GetNamedSmartTargetRules();
@@ -448,23 +453,29 @@ public class JobConfigWindow : Window, IDisposable
         }
         ImGui.Spacing();
         
-        // Smart Targeting Settings section
-        ImRaiiComponents.SectionHeader("Smart Targeting Settings:");
-        
-        // Chocobo targeting setting
-        var includeChocobos = jobConfig.GetSetting("SmartTargetIncludeChocobos", false);
-        if (ImGui.Checkbox("Include Your Chocobo in Smart Targeting", ref includeChocobos))
+        // Per-job Companion (Chocobo) Settings
+        ImRaiiComponents.SectionHeader("Companion (Chocobo) Settings:");
+        var compEnabled = jobConfig.GetSetting("CompanionScanEnabled", true);
+        if (ImGui.Checkbox("Enable Companion Scanning (per-job)", ref compEnabled))
         {
-            jobConfig.SetSetting("SmartTargetIncludeChocobos", includeChocobos);
-            ModernActionCombo.PluginLog?.Debug($"WHM Chocobo smart targeting set to {includeChocobos}");
+            jobConfig.SetSetting("CompanionScanEnabled", compEnabled);
+            Core.Services.ConfigSaveScheduler.NotifyChanged();
         }
-        ImGui.SameLine();
-        ImRaiiComponents.HelpMarker("When enabled, smart healing abilities will consider your chocobo as a valid target. " +
-                                   "Uses name matching to identify your chocobo specifically. " +
-                                   "Hard targeting (manual selection) will work regardless of this setting.");
-        
-        ImGui.Spacing();
-        ImGui.TextColored(new Vector4(0.6f, 0.6f, 0.6f, 1.0f), "Note: Smart targeting now uses the game engine's built-in validation for maximum compatibility.");
+        var compOverride = jobConfig.GetSetting("CompanionOverrideEnabled", false);
+        if (ImGui.Checkbox("Allow Companion Override when much lower HP (per-job)", ref compOverride))
+        {
+            jobConfig.SetSetting("CompanionOverrideEnabled", compOverride);
+            Core.Services.ConfigSaveScheduler.NotifyChanged();
+        }
+        if (compOverride)
+        {
+            var delta = jobConfig.GetSetting("CompanionOverrideDelta", 0.25f);
+            if (ImGui.SliderFloat("Override HP Delta (per-job)", ref delta, 0.05f, 0.5f, "%.02f"))
+            {
+                jobConfig.SetSetting("CompanionOverrideDelta", delta);
+                Core.Services.ConfigSaveScheduler.NotifyChanged();
+            }
+        }
     }
     
     /// <summary>
@@ -551,6 +562,10 @@ public class JobConfigWindow : Window, IDisposable
         
         ImGui.Spacing();
         ImGui.TextColored(new Vector4(0.6f, 0.6f, 0.6f, 1.0f), "Commands: /macconfig (this window), /mac (debug panel)");
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
     }
 
     public void Dispose()
@@ -559,5 +574,12 @@ public class JobConfigWindow : Window, IDisposable
         {
             _disposed = true;
         }
+    }
+
+    public override void OnClose()
+    {
+        // Persist configuration when the config window is closed
+        try { ConfigurationStorage.SaveAll(); } catch { /* ignore */ }
+        base.OnClose();
     }
 }

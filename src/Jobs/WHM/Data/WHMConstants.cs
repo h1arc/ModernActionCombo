@@ -13,17 +13,26 @@ public static class WHMConstants
     // Store as const arrays for action resolution
     private static readonly uint[] SingleTargetIds = [119, 127, 3568, 16533, 25859]; // Stone, Stone2, Stone3, Glare, Glare3 (no Glare4 - requires Sacred Sight buff)
     private static readonly byte[] SingleTargetLevels = [1, 2, 18, 64, 72];
-    
-    private static readonly uint[] DoTIds = [121, 132, 16532]; // Aero, Aero2, Dia
-    private static readonly byte[] DoTLevels = [4, 46, 72];
-    
+
+    // DoT: Resolve to Dia only (no Aero/Aero II fallbacks)
+    private static readonly uint[] DoTIds = [16532]; // Dia only
+    private static readonly byte[] DoTLevels = [72];
+
     private static readonly uint[] AoEIds = [139, 25860]; // Holy, Holy3
     private static readonly byte[] AoELevels = [45, 82];
-    
+
     // Direct constants for most-used actions
     public const uint Glare3 = 25859;
     public const uint Glare4 = 37009;    // Only usable with Sacred Sight buff
+    public const uint Glare = 16533;
+    public const uint Stone3 = 3568;
+    public const uint Stone2 = 127;
+    public const uint Stone = 119;
     public const uint Dia = 16532;
+    public const uint Aero2 = 132; // legacy, not used in resolver
+    public const uint Aero = 121;  // legacy, not used in resolver
+    public const uint Holy3 = 25860;
+    public const uint Holy = 139;
     public const uint AfflatusMisery = 16535;   // Blood Lily - DPS ability
     public const uint AfflatusSolace = 16531;   // Healing Lily - Single target heal
     public const uint AfflatusRapture = 16534;  // Healing Lily - AoE heal
@@ -42,15 +51,16 @@ public static class WHMConstants
     public const uint Asylum = 3569;
     public const uint LiturgyOfTheBell = 25862;
     public const uint LiturgyOfTheBellBurst = 28509;
+    public const uint Esuna = 7568; // Cleanse
     #endregion
 
     #region GameStateCache Integration
     /// <summary>Gets the optimal single-target action for current player level from GameStateCache.</summary>
     public static uint SingleTarget => GetOptimalSingleTargetFallback(GameStateCache.Level);
-    
+
     /// <summary>Gets the optimal DoT action for current player level from GameStateCache.</summary>
     public static uint DoT => GetOptimalDoTFallback(GameStateCache.Level);
-    
+
     /// <summary>Gets the optimal AoE action for current player level from GameStateCache.</summary>
     public static uint AoE => GetOptimalAoEFallback(GameStateCache.Level);
     #endregion
@@ -68,12 +78,12 @@ public static class WHMConstants
         }
         return SingleTargetIds[0]; // Default to Stone
     }
-    
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static uint GetOptimalDoTFallback(uint level)
     {
-        if (level < 4) return 0; // No DoT available
-        
+        if (level < 72) return 0; // Dia unlocks at 72
+
         for (int i = DoTLevels.Length - 1; i >= 0; i--)
         {
             if (level >= DoTLevels[i])
@@ -81,12 +91,12 @@ public static class WHMConstants
         }
         return 0;
     }
-    
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static uint GetOptimalAoEFallback(uint level)
     {
         if (level < 45) return 0; // No AoE available
-        
+
         for (int i = AoELevels.Length - 1; i >= 0; i--)
         {
             if (level >= AoELevels[i])
@@ -107,12 +117,12 @@ public static class WHMConstants
         return baseActionId switch
         {
             119 or 127 or 3568 or 16533 or 25859 => SingleTarget, // Stone variants, Glare variants
-            121 or 132 or 16532 => DoT, // Aero variants, Dia
+            16532 => DoT, // Dia only
             139 or 25860 => AoE, // Holy variants
             _ => baseActionId // Unknown action - return as-is
         };
     }
-    
+
     /// <summary>
     /// Test-friendly version of ResolveAction that takes level parameter.
     /// Used by unit tests to avoid GameStateCache dependency.
@@ -123,44 +133,46 @@ public static class WHMConstants
         return baseActionId switch
         {
             119 or 127 or 3568 or 16533 or 25859 => GetOptimalSingleTargetFallback(level), // Stone variants, Glare variants
-            121 or 132 or 16532 => GetOptimalDoTFallback(level), // Aero variants, Dia
+            16532 => GetOptimalDoTFallback(level), // Dia only
             139 or 25860 => GetOptimalAoEFallback(level), // Holy variants
             _ => baseActionId // Unknown action - return as-is
         };
     }
-    
+
     /// <summary>
     /// Gets all possible action IDs that should be intercepted for WHM single-target DPS.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static uint[] GetAllSingleTargetActions() => SingleTargetIds;
+    public static ReadOnlySpan<uint> GetAllSingleTargetActionsSpan() => SingleTargetIds;
+    internal static ReadOnlySpan<uint> GetAllDoTActionsSpan() => DoTIds;
+    internal static ReadOnlySpan<uint> GetAllAoEActionsSpan() => AoEIds;
     #endregion
 
     #region Utility Methods
     /// <summary>Check if job is WHM/CNJ.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsJob(uint jobId) => jobId == 24u || jobId == 6u; // WHM (24) or CNJ (6)
-    
+
     /// <summary>Gets the DoT debuff ID for a given DoT action.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static uint GetDoTDebuff(uint dotAction) => dotAction switch
     {
         16532 => 1871, // Dia
-        132 => 144,    // Aero2  
-        121 => 143,    // Aero
+        Glare3 or Glare or Stone3 or Stone2 or Stone => 0, // non-DoT safe path
         _ => 0
     };
     #endregion
-    
+
     #region Job and Debuff Constants
     public const uint WHMJobId = 24;
     public const uint CNJJobId = 6;
-    
+
     // Debuff IDs for DoTs
     public const uint DiaDebuffId = 1871;
     public const uint Aero2DebuffId = 144;
     public const uint AeroDebuffId = 143;
-    
+
     // Buff IDs  
     public const uint PresenceOfMindBuffId = 157;
     public const uint SacredSightBuffId = 3879;
@@ -168,18 +180,16 @@ public static class WHMConstants
 
     // Assize 
     public const uint Assize = 3571;
-    
+
     /// <summary>
     /// All WHM debuffs (DoTs) that should be tracked on targets.
     /// Used by GameStateCache initialization.
     /// </summary>
-    public static readonly uint[] DebuffsToTrack = 
+    public static readonly uint[] DebuffsToTrack =
     [
         DiaDebuffId,        // 1871 - Dia
-        Aero2DebuffId,      // 144 - Aero II  
-        AeroDebuffId,       // 143 - Aero
     ];
-    
+
     /// <summary>
     /// All WHM player buffs that should be tracked.
     /// Used by GameStateCache initialization.
@@ -190,17 +200,22 @@ public static class WHMConstants
         SacredSightBuffId,      // 3879 - Sacred Sight
         LiturgyOfTheBellBuffId, // 2709 - Liturgy of the Bell
     ];
-    
+
     /// <summary>
     /// All WHM actions that should have their cooldowns tracked.
     /// Used by GameStateCache initialization and UpdateActionCooldowns.
     /// </summary>
     public static readonly uint[] CooldownsToTrack =
     [
-        LucidDreaming,      // 1204 - Lucid Dreaming
+        LucidDreaming,      // 7562 - Lucid Dreaming
         PresenceOfMind,     // 136
         Assize,             // 3571  
         AfflatusRapture,    // 16534
     ];
+
+    // Span views for zero-allocation enumeration when needed
+    public static ReadOnlySpan<uint> DebuffsToTrackSpan => DebuffsToTrack;
+    public static ReadOnlySpan<uint> BuffsToTrackSpan => BuffsToTrack;
+    public static ReadOnlySpan<uint> CooldownsToTrackSpan => CooldownsToTrack;
     #endregion
 }

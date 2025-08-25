@@ -58,6 +58,15 @@ public interface IGaugeProvider
     /// Get debug information about the current gauge state.
     /// </summary>
     string GetGaugeDebugInfo();
+
+    /// <summary>
+    /// Optional snapshot method to copy gauge values atomically for UI/debug.
+    /// Default implementation calls the individual getters; override if needed to avoid tearing.
+    /// </summary>
+    (uint data1, uint data2) Snapshot()
+    {
+        return (GetGaugeData1(), GetGaugeData2());
+    }
 }
 
 /// <summary>
@@ -69,16 +78,19 @@ public interface ITrackingProvider
     /// <summary>
     /// Get debuff IDs that should be tracked on targets for this job.
     /// </summary>
+    /// <remarks>Prefer returning cached arrays or Array.Empty<uint>() to avoid per-frame allocations.</remarks>
     uint[] GetDebuffsToTrack();
     
     /// <summary>
     /// Get buff IDs that should be tracked on the player for this job.
     /// </summary>
+    /// <remarks>Prefer returning cached arrays or Array.Empty<uint>() to avoid per-frame allocations.</remarks>
     uint[] GetBuffsToTrack();
     
     /// <summary>
     /// Get action IDs that should have cooldowns tracked for this job.
     /// </summary>
+    /// <remarks>Prefer returning cached arrays or Array.Empty<uint>() to avoid per-frame allocations.</remarks>
     uint[] GetCooldownsToTrack();
 }
 

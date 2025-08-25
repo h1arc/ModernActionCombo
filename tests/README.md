@@ -1,6 +1,6 @@
-# ModernWrathCombo Testing
+# ModernActionCombo Testing
 
-This directory is prepared for comprehensive testing of the ModernWrathCombo system.
+This directory is prepared for comprehensive testing of the ModernActionCombo system.
 
 ## Current Status
 
@@ -43,7 +43,7 @@ When adding tests, follow these patterns:
 - Use BenchmarkDotNet for performance measurements
 - **Focus**: Fast execution, high coverage, isolated components
 - **Examples**: 
-  - `ActionResolverTests.cs` - Dictionary lookup behavior
+  - `WHMConstantsTests.cs` - Action constants and helper chains
   - `GameStateTests.cs` - Struct validation and helper methods
   - `WHMBasicComboTests.cs` - Combo logic with mocked dependencies
 
@@ -59,7 +59,7 @@ When adding tests, follow these patterns:
 - **Framework**: BenchmarkDotNet
 - **Target**: <50ns action resolution time
 - **Examples**:
-  - `ActionResolverBenchmarks.cs` - Micro-benchmarks for hot paths
+  - `GameStateCacheBenchmarks.cs` - Micro-benchmarks for hot paths
 
 ## Running Tests
 

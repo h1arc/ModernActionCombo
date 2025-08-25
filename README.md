@@ -8,35 +8,16 @@
 > **Modern High-Performance Action Resolver for FFXIV**  
 > Yet another combo plugin with modern .NET 9 optimizations.
 
-This is a **complete rewrite** focusing on:
-- **Performance**: Sub-ms action resolution with zero allocations
-- **Simplicity**: Clean architecture that's easy to understand and extend
-- **Modern .NET**: Leveraging .NET 9's latest performance optimizations
+This is being written from scratch ocusing on performance and simplicity (kind of).
 
 ### Project Structure (to be updated)
 ```
-/ModernActionCombo/
-├── src/                         # Streamlined implementation
-│   ├── Core/                    # ActionResolver, GameState, IActionHandler
-│   └── Jobs/WHM/               # WHM constants and combo logic
-├── tests/                       # Comprehensive testing (Dalamud-free)
-│   ├── Unit/                   # Component isolation tests
-│   ├── Integration/            # End-to-end workflow tests
-│   └── Performance/            # BenchmarkDotNet with 0-100 scoring
-├── run-benchmarks.sh           # Quick performance validation
-├── PERFORMANCE.md              # Performance guide and scoring
-└── DEV_JOURNAL.md              # Complete development history
+to be updated
 ```
-
-### Phase 3: Active (to be updated)
-- [ ] UI development for configuration
-- [ ] Dalamud plugin integration
-- [ ] Live FFXIV testing
-- [ ] Additional job implementations
 
 ## �📜 License
 
 This project is licensed under the AGPL v3 License - see the [LICENSE](LICENSE) file for details.
 
 
-This project was inspired by [WrathCombo team](https://github.com/PunishXIV/WrathCombo)'s WrathCombo plus other plugins like it.
+This project was largely inspired by all other combo plugins like WrathCombo, XIVCombo, etc.

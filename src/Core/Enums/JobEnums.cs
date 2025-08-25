@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+using System;
 using System.Runtime.CompilerServices;
 
 namespace ModernActionCombo.Core.Enums;
@@ -96,103 +96,131 @@ public enum JobID : uint
 /// </summary>
 public static class JobHelper
 {
-    // Pre-computed job name mappings for O(1) lookup performance
-    private static readonly Dictionary<uint, string> JobNames = new()
-    {
-        [0] = "None",
-        [1] = "GLA", [19] = "PLD",
-        [2] = "PGL", [20] = "MNK", 
-        [3] = "MRD", [21] = "WAR",
-        [4] = "LNC", [22] = "DRG",
-        [5] = "ARC", [23] = "BRD",
-        [6] = "CNJ", [24] = "WHM",
-        [7] = "THM", [25] = "BLM",
-        [8] = "CRP", [9] = "BSM", [10] = "ARM", [11] = "GSM",
-        [12] = "LTW", [13] = "WVR", [14] = "ALC", [15] = "CUL",
-        [16] = "MIN", [17] = "BTN", [18] = "FSH",
-        [26] = "ACN", [27] = "SMN", [28] = "SCH",
-        [29] = "ROG", [30] = "NIN",
-        [31] = "MCH", [32] = "DRK", [33] = "AST",
-        [34] = "SAM", [35] = "RDM", [36] = "BLU",
-        [37] = "GNB", [38] = "DNC", [39] = "RPR",
-        [40] = "SGE", [41] = "VPR", [42] = "PCT"
-    };
+    // Dense, indexable lookup by JobID (0..42). Using arrays avoids hashing/branching per call.
+    private static readonly string[] JobNames =
+    [
+        // 0..7
+        "None", "GLA", "PGL", "MRD", "LNC", "ARC", "CNJ", "THM",
+        // 8..15 (crafting)
+        "CRP", "BSM", "ARM", "GSM", "LTW", "WVR", "ALC", "CUL",
+        // 16..23
+        "MIN", "BTN", "FSH", "PLD", "MNK", "WAR", "DRG", "BRD",
+        // 24..31
+        "WHM", "BLM", "ACN", "SMN", "SCH", "ROG", "NIN", "MCH",
+        // 32..39
+        "DRK", "AST", "SAM", "RDM", "BLU", "GNB", "DNC", "RPR",
+        // 40..42
+        "SGE", "VPR", "PCT"
+    ];
+
+    // Role lookup table aligned with JobID values.
+    private static readonly JobRole[] RolesById =
+    [
+        // 0..7
+        JobRole.None,              // 0 None/Adventurer
+        JobRole.Tank,              // 1 GLA
+        JobRole.MeleeDPS,          // 2 PGL
+        JobRole.Tank,              // 3 MRD
+        JobRole.MeleeDPS,          // 4 LNC
+        JobRole.PhysicalRangedDPS, // 5 ARC
+        JobRole.Healer,            // 6 CNJ
+        JobRole.MagicalDPS,        // 7 THM
+        // 8..15 (crafting)
+        JobRole.CraftingGathering, // 8 CRP
+        JobRole.CraftingGathering, // 9 BSM
+        JobRole.CraftingGathering, // 10 ARM
+        JobRole.CraftingGathering, // 11 GSM
+        JobRole.CraftingGathering, // 12 LTW
+        JobRole.CraftingGathering, // 13 WVR
+        JobRole.CraftingGathering, // 14 ALC
+        JobRole.CraftingGathering, // 15 CUL
+        // 16..23
+        JobRole.CraftingGathering, // 16 MIN
+        JobRole.CraftingGathering, // 17 BTN
+        JobRole.CraftingGathering, // 18 FSH
+        JobRole.Tank,              // 19 PLD
+        JobRole.MeleeDPS,          // 20 MNK
+        JobRole.Tank,              // 21 WAR
+        JobRole.MeleeDPS,          // 22 DRG
+        JobRole.PhysicalRangedDPS, // 23 BRD
+        // 24..31
+        JobRole.Healer,            // 24 WHM
+        JobRole.MagicalDPS,        // 25 BLM
+        JobRole.Healer,            // 26 ACN (treated as healer per original logic)
+        JobRole.MagicalDPS,        // 27 SMN
+        JobRole.Healer,            // 28 SCH
+        JobRole.MeleeDPS,          // 29 ROG
+        JobRole.MeleeDPS,          // 30 NIN
+        JobRole.PhysicalRangedDPS, // 31 MCH
+        // 32..39
+        JobRole.Tank,              // 32 DRK
+        JobRole.Healer,            // 33 AST
+        JobRole.MeleeDPS,          // 34 SAM
+        JobRole.MagicalDPS,        // 35 RDM
+        JobRole.Limited,           // 36 BLU
+        JobRole.Tank,              // 37 GNB
+        JobRole.PhysicalRangedDPS, // 38 DNC
+        JobRole.MeleeDPS,          // 39 RPR
+        // 40..42
+        JobRole.Healer,            // 40 SGE
+        JobRole.MeleeDPS,          // 41 VPR
+        JobRole.MagicalDPS         // 42 PCT
+    ];
+
+    // No static constructor required; arrays above are the single source of truth.
 
     /// <summary>
     /// Gets the display name for a job ID with O(1) performance.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static string GetJobName(uint jobId) => 
-        JobNames.TryGetValue(jobId, out var name) ? name : $"Unknown({jobId})";
+    public static string GetJobName(uint jobId) =>
+        jobId < (uint)JobNames.Length ? JobNames[jobId] : $"Unknown({jobId})";
+
+    // Convenience overloads for enum inputs (no behavior change)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string GetJobName(JobID job) => GetJobName((uint)job);
+
+    // Parsing by short-name removed for simplicity. Add back if needed.
 
     /// <summary>
     /// Gets the job role for a given job ID using optimized range checks.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static JobRole GetJobRole(uint jobId) => jobId switch
-    {
-        // Tanks (optimized with range patterns)
-        1 or 19 or 3 or 21 or 32 or 37 => JobRole.Tank,
-        
-        // Healers  
-        6 or 24 or 26 or 28 or 33 or 40 => JobRole.Healer,
-        
-        // Melee DPS
-        2 or 20 or 4 or 22 or 29 or 30 or 34 or 39 or 41 => JobRole.MeleeDPS,
-        
-        // Physical Ranged DPS
-        5 or 23 or 31 or 38 => JobRole.PhysicalRangedDPS,
-        
-        // Magical DPS
-        7 or 25 or 27 or 35 or 42 => JobRole.MagicalDPS,
-        
-        // Limited Jobs
-        36 => JobRole.Limited,
-        
-        // Crafting & Gathering (range optimization)
-        >= 8 and <= 18 when jobId != 19 => JobRole.CraftingGathering,
-        
-        _ => JobRole.None
-    };
+    public static JobRole GetJobRole(uint jobId) =>
+        jobId < (uint)RolesById.Length ? RolesById[jobId] : JobRole.None;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static JobRole GetJobRole(JobID job) => GetJobRole((uint)job);
 
     /// <summary>
-    /// Checks if a job ID is a valid combat job with inlined role check.
+    /// Checks if a job ID is a healer job.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsCombatJob(uint jobId) => jobId switch
-    {
-        // Direct combat job checks (eliminates GetJobRole call)
-        1 or 19 or 3 or 21 or 32 or 37 or // Tanks
-        6 or 24 or 26 or 28 or 33 or 40 or // Healers  
-        2 or 20 or 4 or 22 or 29 or 30 or 34 or 39 or 41 or // Melee DPS
-        5 or 23 or 31 or 38 or // Physical Ranged DPS
-        7 or 25 or 27 or 35 or 42 // Magical DPS
-        => true,
-        _ => false
-    };
+    public static bool IsHealer(uint jobId)
+        => jobId < (uint)RolesById.Length && RolesById[jobId] == JobRole.Healer;
 
-    /// <summary>
-    /// Checks if a job ID is a healer job with direct comparison.
-    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsHealer(uint jobId) => jobId is 6 or 24 or 26 or 28 or 33 or 40;
+    public static bool IsHealer(JobID job) => IsHealer((uint)job);
 
     /// <summary>
-    /// Checks if a job ID is a tank job with direct comparison.
+    /// Checks if a job ID is a tank job.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]  
-    public static bool IsTank(uint jobId) => jobId is 1 or 19 or 3 or 21 or 32 or 37;
+    public static bool IsTank(uint jobId)
+        => jobId < (uint)RolesById.Length && RolesById[jobId] == JobRole.Tank;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsTank(JobID job) => IsTank((uint)job);
 
     /// <summary>
-    /// Checks if a job ID is a DPS job with direct comparison.
+    /// Checks if a job ID is a DPS job (melee, physical ranged, or magical).
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsDPS(uint jobId) => jobId switch
-    {
-        2 or 20 or 4 or 22 or 29 or 30 or 34 or 39 or 41 or // Melee DPS
-        5 or 23 or 31 or 38 or // Physical Ranged DPS  
-        7 or 25 or 27 or 35 or 42 // Magical DPS
-        => true,
-        _ => false
-    };
+    public static bool IsDPS(uint jobId)
+        => jobId < (uint)RolesById.Length && (RolesById[jobId] == JobRole.MeleeDPS || RolesById[jobId] == JobRole.PhysicalRangedDPS || RolesById[jobId] == JobRole.MagicalDPS);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsDPS(JobID job) => IsDPS((uint)job);
+
+    // Additional helpers like IsCombatJob/IsLimited/IsCraftingGathering/HasRole removed for simplicity.
 }

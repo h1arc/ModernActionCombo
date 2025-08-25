@@ -28,4 +28,16 @@
     <ProjectReference Include="../src/ModernActionCombo.csproj" />
   </ItemGroup>
 
+  <!-- Exclude standalone micro-benchmarks from test compilation -->
+  <ItemGroup>
+  <!-- Remove all benchmark projects from this test project's compile items -->
+  <Compile Remove="Benchmarks.Micro/**;Benchmarks.ConfigCache/**;Benchmarks.Common/**" />
+  <!-- Keep them visible in the workspace as content-only (not compiled) and ignore their bin/obj trees -->
+  <None Include="Benchmarks.Micro/**" Exclude="Benchmarks.Micro/bin/**;Benchmarks.Micro/obj/**" />
+  <None Include="Benchmarks.ConfigCache/**" Exclude="Benchmarks.ConfigCache/bin/**;Benchmarks.ConfigCache/obj/**" />
+  <None Include="Benchmarks.Common/**" Exclude="Benchmarks.Common/bin/**;Benchmarks.Common/obj/**" />
+  <!-- Also ensure any nested bin/obj under tests are never included -->
+  <Compile Remove="**/bin/**;**/obj/**" />
+  </ItemGroup>
+
 </Project>

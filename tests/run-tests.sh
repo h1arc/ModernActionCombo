@@ -72,7 +72,7 @@ show_test_coverage() {
     echo -e "${CYAN}📊 Test Coverage Summary:${NC}"
     echo -e "${BLUE}─────────────────────────────────────${NC}"
     echo -e "${GREEN}✓${NC} Core/GameStateCache - SIMD operations, thread safety"
-    echo -e "${GREEN}✓${NC} Core/ActionResolver - Elementary action resolution"
+    # ActionResolver removed; logic lives in job providers
     echo -e "${GREEN}✓${NC} Jobs/WHMConstants - Action constants and helpers"
     echo -e "${GREEN}✓${NC} Integration/Performance - System stability and speed"
     echo -e "${YELLOW}⚠${NC} Grid/Rotation system - Pending full integration"
@@ -181,7 +181,7 @@ main() {
         echo ""
         echo -e "${BLUE}🎯 Performance Targets:${NC}"
         echo -e "   ${CYAN}GameStateCache.CreateSnapshot()${NC}    < 50ns"
-        echo -e "   ${CYAN}ActionResolver.ResolveToLevel()${NC}    < 100ns"
+    # ActionResolver removed; track provider resolution instead
         echo -e "   ${CYAN}GameStateData construction${NC}         < 10ns"
         echo -e "   ${CYAN}Grid evaluation (full rotation)${NC}    < 500ns"
         
