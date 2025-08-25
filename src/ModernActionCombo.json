@@ -1,8 +1,8 @@
 {
     "Author": "h1arc",
     "Name": "ModernActionCombo",
-    "Punchline": "Simple high-performance combo system for FFXIV",
-    "Description": "ModernActionCombo yet another combo consolidator for FFXIV.",
+    "Punchline": "Yet another FFXIV combo plugin.",
+    "Description": "Yet another FFXIV combo plugin.",
     "InternalName": "ModernActionCombo",
     "AssemblyVersion": "1.2.0.0",
     "RepoUrl": "https://github.com/h1arc/ModernActionCombo",
