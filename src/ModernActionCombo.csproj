@@ -9,15 +9,15 @@
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Optimize>true</Optimize>
-    <AssemblyVersion>1.1.0.127</AssemblyVersion>
-  <FileVersion>1.1.0.127</FileVersion>
+    <AssemblyVersion>1.2.0.0</AssemblyVersion>
+  <FileVersion>1.2.0.0</FileVersion>
 </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
-    <AssemblyVersion>1.1.0.127</AssemblyVersion>
-  <FileVersion>1.1.0.127</FileVersion>
+    <AssemblyVersion>1.2.0.0</AssemblyVersion>
+  <FileVersion>1.2.0.0</FileVersion>
 </PropertyGroup>
 
   <ItemGroup>

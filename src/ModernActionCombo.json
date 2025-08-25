@@ -4,7 +4,7 @@
     "Punchline": "Simple high-performance combo system for FFXIV",
     "Description": "ModernActionCombo is a clean slate rewrite focusing on simplicity and performance. Ultra-fast action resolution with modern .NET 9 patterns and minimal complexity.",
     "InternalName": "ModernActionCombo",
-    "AssemblyVersion": "1.1.0.127",
+    "AssemblyVersion": "1.2.0.0",
     "RepoUrl": "https://github.com/h1arc/ModernActionCombo",
     "ApplicableVersion": "any",
     "Tags": [
