@@ -2,7 +2,7 @@
     "Author": "h1arc",
     "Name": "ModernActionCombo",
     "Punchline": "Simple high-performance combo system for FFXIV",
-    "Description": "ModernActionCombo is a clean slate rewrite focusing on simplicity and performance. Ultra-fast action resolution with modern .NET 9 patterns and minimal complexity.",
+    "Description": "ModernActionCombo yet another combo consolidator for FFXIV.",
     "InternalName": "ModernActionCombo",
     "AssemblyVersion": "1.2.0.0",
     "RepoUrl": "https://github.com/h1arc/ModernActionCombo",
@@ -25,5 +25,5 @@
     "LoadSync": false,
     "CanUnloadAsync": true,
     "LoadPriority": 0,
-    "Changelog": "Phase 1 Alpha - Clean slate foundation with ultra-fast action resolution"
+    "Changelog": "alpha 1.2 - whm mostly usable"
 }
