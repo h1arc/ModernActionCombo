@@ -8,7 +8,7 @@
     "AssemblyVersion": "1.2.0.0",
     "RepoUrl": "https://github.com/h1arc/ModernActionCombo",
     "ApplicableVersion": "any",
-    "DalamudApiLevel": "13",
+    "DalamudApiLevel": 13,
     "Changelog": "alpha 1.2 - whm mostly usable",
     "DownloadLinkInstall": "https://github.com/h1arc/ModernActionCombo/releases/download/v1.2.0.0/ModernActionCombo-1.2.0.0.zip",
     "DownloadLinkUpdate": "https://github.com/h1arc/ModernActionCombo/releases/download/v1.2.0.0/ModernActionCombo-1.2.0.0.zip"
