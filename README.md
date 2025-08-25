@@ -5,6 +5,8 @@
 [![Performance](https://img.shields.io/badge/Performance-78%2F100-yellow.svg)](PERFORMANCE.md)
 [![Status](https://img.shields.io/badge/Status-Backend%20Complete-green.svg)](DEV_JOURNAL.md)
 
+this will probably never be released :)
+
 > **Modern High-Performance Action Resolver for FFXIV**  
 > Yet another combo plugin with modern .NET 9 optimizations.
 
